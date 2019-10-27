@@ -19,7 +19,14 @@ extern int64_t  ltotalBusMicroAmps;
 extern uint32_t lreadings;
 extern int32_t  lnow;
 extern osThreadId osUpdateScreenThreadId;
+extern int16_t  zero;
+extern int64_t  totalBusMicroAmps;
+extern uint8_t  minRange;
 extern bool serialEnable;
+extern uint16_t ranges[4];
+
+int longPress=0;
+int calibrationStep=0;
 
 char sbuf[32];
 void printFloat(float v, int8_t maxDigits, bool enlargeForMinus, const char* suffix) {
@@ -36,6 +43,8 @@ void printFloat(float v, int8_t maxDigits, bool enlargeForMinus, const char* suf
     oled.puts(suffix); 
 }
 
+extern "C" uint16_t EE_WriteVariable(uint16_t VirtAddress, uint16_t Data);
+
 extern "C" void updateScreenX(void const *arg);
 void updateScreenX(void const *arg) {
   osUpdateScreenThreadId = osThreadGetId();
@@ -50,6 +59,77 @@ void updateScreenX(void const *arg) {
   for(;;)
   {
     osSignalWait(0x1,1000);    
+    // code here normall executes every ~100ms
+
+    // handling button presses
+    if (HAL_GPIO_ReadPin(BTN_UP_GPIO_Port,BTN_UP_Pin)==GPIO_PIN_RESET) {
+      longPress++;
+      if (longPress>50 && calibrationStep==0) {
+        calibrationStep=10;
+        longPress=0;        
+      }
+    }
+    if (HAL_GPIO_ReadPin(BTN_RIGHT_GPIO_Port,BTN_RIGHT_Pin)==GPIO_PIN_RESET) {
+      longPress++;
+      if (longPress>50) {
+        longPress=0;
+        zero = lsumBusMicroAmpsOrig / lreadings;
+        EE_WriteVariable(0x1700,zero);
+        longPress=0;
+        totalBusMicroAmps = 0;
+        lnow=0;
+        for (int i=0; i<128; i++) {
+          plot[i]=0;
+          plot1[i]=0;
+          plot2[i]=0;
+        }        
+      }
+    }       
+    if (HAL_GPIO_ReadPin(BTN_SEL_GPIO_Port,BTN_SEL_Pin)==GPIO_PIN_RESET) {
+      longPress++;
+      if (longPress>10) {
+        longPress=0;
+        totalBusMicroAmps = 0;
+        lnow=0;
+        for (int i=0; i<128; i++) {
+          plot[i]=0;
+          plot1[i]=0;
+          plot2[i]=0;
+        }
+      }
+    }  
+    if (HAL_GPIO_ReadPin(BTN_LEFT_GPIO_Port,BTN_LEFT_Pin)==GPIO_PIN_RESET) {
+      longPress++;
+      if (longPress>2) {
+        longPress=0;
+        serialEnable = !serialEnable;
+      }
+    }
+
+    // calibration
+  if (calibrationStep>0) {
+    switch (calibrationStep) {
+      case 10:      // set 3 rd range
+        minRange = 3;
+        break;
+      case 9:
+        break;      // wait one cycle
+      case 8:
+        ranges[3] = (int)(((float)(lsumBusMillVolts/lreadings)/(lsumBusMicroAmps/lreadings))*ranges[3]);
+        EE_WriteVariable(0x1702,ranges[3]);     
+        minRange = 2;
+      case 7:
+        break;      // wait one cycle
+      case 6:
+        ranges[2] = (int)(((float)(lsumBusMillVolts/lreadings)/(lsumBusMicroAmps/lreadings))*ranges[2]);
+        EE_WriteVariable(0x1701,ranges[2]);     
+        minRange = 0;
+        calibrationStep = 0;
+        break;
+    }
+    calibrationStep--;
+  }
+
 //	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);    
 
     // voltage

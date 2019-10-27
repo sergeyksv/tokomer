@@ -453,6 +453,14 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
+  /*Configure GPIO pins : BTN_LEFT_Pin BTN_SEL_Pin BTN_UP_Pin BTN_RIGHT_Pin 
+                           BTN_DOWN_Pin */
+  GPIO_InitStruct.Pin = BTN_LEFT_Pin|BTN_SEL_Pin|BTN_UP_Pin|BTN_RIGHT_Pin 
+                          |BTN_DOWN_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
 }
 
 /* USER CODE BEGIN 4 */
@@ -484,6 +492,7 @@ uint8_t  power            = 1;
 uint8_t  range            = 3;
 uint8_t  minRange         = 0;
 bool serialEnable = false;
+uint16_t ranges[4]={0,50,500,5000};
 
 uint64_t lsumBusMillVolts;
 int64_t  lsumBusMicroAmps;
@@ -502,6 +511,9 @@ uint16_t usbLen=0;
 uint8_t usbPage=0;
 
 #include <math.h>
+#include "eeprom.h"
+
+uint16_t VirtAddVarTab[NumbOfVar] = {0x1700, 0x1701, 0x1702};
 
 /* USER CODE END 4 */
 
@@ -520,6 +532,14 @@ void StartDefaultTask(void const * argument)
   osMainThreadId = osThreadGetId ();
   osThreadCreate(osThread (updateScreen), NULL);  
   HAL_TIM_Base_Start_IT(&htim3);
+
+  HAL_FLASH_Unlock();
+
+  EE_Init();
+
+  EE_ReadVariable(0x1700,(uint16_t)(&zero));
+  EE_ReadVariable(0x1701,&ranges[2]);
+  EE_ReadVariable(0x1702,&ranges[3]);  
 
   /* Infinite loop */
   char*  pageBuf=bufUsb[usbPage];
@@ -556,7 +576,6 @@ void StartDefaultTask(void const * argument)
   HAL_TIM_RegisterCallback(&htim3,HAL_TIM_PERIOD_ELAPSED_CB_ID,&USR_TIM_PeriodElapsedCallback);
 
   int cicleCounter =0;
-  uint16_t ranges[4]={0,50,500,5000};
 
   for(;;)
   {

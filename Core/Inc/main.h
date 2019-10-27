@@ -72,6 +72,16 @@ void Error_Handler(void);
 #define RANGE2_GPIO_Port GPIOB
 #define RANGE1_Pin GPIO_PIN_10
 #define RANGE1_GPIO_Port GPIOB
+#define BTN_LEFT_Pin GPIO_PIN_11
+#define BTN_LEFT_GPIO_Port GPIOB
+#define BTN_SEL_Pin GPIO_PIN_12
+#define BTN_SEL_GPIO_Port GPIOB
+#define BTN_UP_Pin GPIO_PIN_13
+#define BTN_UP_GPIO_Port GPIOB
+#define BTN_RIGHT_Pin GPIO_PIN_14
+#define BTN_RIGHT_GPIO_Port GPIOB
+#define BTN_DOWN_Pin GPIO_PIN_15
+#define BTN_DOWN_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */
