@@ -64,6 +64,7 @@ void Error_Handler(void);
 #define DISPDC_GPIO_Port GPIOA
 #define INA_ALERT_Pin GPIO_PIN_2
 #define INA_ALERT_GPIO_Port GPIOA
+#define INA_ALERT_EXTI_IRQn EXTI2_IRQn
 #define DISPRES_Pin GPIO_PIN_3
 #define DISPRES_GPIO_Port GPIOA
 #define RANGE3_Pin GPIO_PIN_0

@@ -442,7 +442,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : INA_ALERT_Pin */
   GPIO_InitStruct.Pin = INA_ALERT_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(INA_ALERT_GPIO_Port, &GPIO_InitStruct);
 
@@ -460,6 +460,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI2_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(EXTI2_IRQn);
 
 }
 
@@ -493,6 +497,19 @@ uint8_t  range            = 3;
 uint8_t  minRange         = 0;
 bool serialEnable = false;
 uint16_t ranges[4]={0,50,500,5000};
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if(GPIO_Pin == GPIO_PIN_2)
+  {
+    // shunt overvoltage, don't think, try to set range 3 right away
+    HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_RESET);
+    range = 3;  
+    skip=1;  
+  } 
+}
 
 uint64_t lsumBusMillVolts;
 int64_t  lsumBusMicroAmps;
@@ -537,16 +554,18 @@ void StartDefaultTask(void const * argument)
 
   EE_Init();
 
-  EE_ReadVariable(0x1700,(uint16_t)(&zero));
+  uint16_t ee_val;
+  EE_ReadVariable(0x1700,&ee_val); zero = ee_val;
   EE_ReadVariable(0x1701,&ranges[2]);
   EE_ReadVariable(0x1702,&ranges[3]);  
 
   /* Infinite loop */
   char*  pageBuf=bufUsb[usbPage];
 
-  HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_SET);
+  range = 3;
+  HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_SET);
 
   // send INA226 reset
   buf[0]=0; buf[1]=0x80; buf[2]=0x00;
@@ -567,6 +586,12 @@ void StartDefaultTask(void const * argument)
   buf[1] = (buf[1]&0xF1)|0x0<<1;
   HAL_I2C_Master_Transmit(&hi2c1,0x80,buf,3,100);
   osDelay(1);
+  // set SOL flag (shut overvoltage)
+  buf[0]=6; buf[1] = 0x80; buf[2]=0;
+  HAL_I2C_Master_Transmit(&hi2c1,0x80,buf,3,100);
+  // set Alert limit to maxium positive value -1
+  buf[0]=7; buf[1] = 0x7F; buf[2]=0xFE;
+  HAL_I2C_Master_Transmit(&hi2c1,0x80,buf,3,100);
 
   // select shunt raw register
   buf[0]=1;
@@ -611,7 +636,7 @@ void StartDefaultTask(void const * argument)
             skip=1;
           }        
       } else if (range!=3) {
-        HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE3_Pin, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_SET);
         HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_RESET);
         HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_RESET);
         range = 3;  
