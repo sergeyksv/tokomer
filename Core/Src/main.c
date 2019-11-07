@@ -344,7 +344,7 @@ static void MX_TIM3_Init(void)
   htim3.Instance = TIM3;
   htim3.Init.Prescaler = 719;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 14;
+  htim3.Init.Period = 19;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
@@ -586,6 +586,8 @@ void StartDefaultTask(void const * argument)
 	HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_RESET);
 	HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_SET);
 
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+
   // send INA226 reset
   buf[0]=0; buf[1]=0x80; buf[2]=0x00;
   HAL_I2C_Master_Transmit(&hi2c1,0x80,buf,3,100);
@@ -597,7 +599,7 @@ void StartDefaultTask(void const * argument)
   // mode: 0 - off, 1 - shunt, 2 - bus, 3 - both, 4 - shutdown, 5 - cont.shunt, 6 - cont.bus, 7 - cont.both
   buf[2] = (buf[2]&0xf8)|0x5; 
   // shunt conversion time:  0 - 140, 1 - 204, 2 - 322, 3 - 588, 4 - 1100, 5 - 2116, 6 - 4156, 7 - 8244  
-  buf[2] = (buf[2]&0xc7)|(0x0<<3);   
+  buf[2] = (buf[2]&0xc7)|(0x1<<3);   
   // bus conversion time:  0 - 140, 1 - 204, 2 - 332, 3 - 588, 4 - 1100, 5 - 2116, 6 - 4156, 7 - 8244  
   buf[2] = (buf[2]&0x3f)|(0x0<<6);   
   buf[1] = (buf[1]&0xFE)|(0x0>>2);   
@@ -633,51 +635,51 @@ void StartDefaultTask(void const * argument)
       microAmps = inaRes;
       microAmps *= ranges[range];
       microAmps = round((float)microAmps/100);
-      } 
-      else 
-          skip--;
+    } 
+    else 
+        skip--;
 
-      // adjust range
-      if (minRange<2 && microAmps < 11000) {
-          if (range!=1) {
-            HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_SET);
-            HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_RESET);
-            HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_RESET);
-            range = 1;
-            skip=1;
-          }   
-      } else if (minRange<3 && microAmps < 110000) {
-          if (range!=2) {
-            HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_SET);
-            HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_RESET);
-            HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_RESET);
-            range = 2;
-            skip=1;
-          }        
-      } else if (range!=3) {
-        HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_SET);
-        HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_RESET);
-        HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_RESET);
-        range = 3;  
-        skip=1;      
-      }
+    // adjust range
+    if (minRange<2 && microAmps < 11000) {
+        if (range!=1) {
+          HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_SET);
+          HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_RESET);
+          HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_RESET);
+          range = 1;
+          skip=1;
+        }   
+    } else if (minRange<3 && microAmps < 110000) {
+        if (range!=2) {
+          HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_SET);
+          HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_RESET);
+          HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_RESET);
+          range = 2;
+          skip=1;
+        }        
+    } else if (range!=3) {
+      HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_SET);
+      HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_RESET);
+      HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_RESET);
+      range = 3;  
+      skip=1;      
+    }
 
-      sumBusMicroAmpsOrig += microAmps; // microAmps;
-      microAmps-=zero;
-      // update accumulators
-      if (readings==0) {
-        minBusMicroAmps = maxBusMicroAmps = microAmps;
-      } else {
-        if (microAmps<minBusMicroAmps) 
-          minBusMicroAmps = microAmps;
-        if (microAmps>maxBusMicroAmps)
-          maxBusMicroAmps = microAmps;
-      }
-      sumBusMicroAmps += microAmps;     // Add current value to sum
-      totalBusMicroAmps += microAmps * 140 / 1000;
-      readings++;    
-      miliVolts = HAL_ADC_GetValue(&hadc1)*14970/4096;
-      sumBusMillVolts += miliVolts; // 14970 = 6 * 24950    
+    sumBusMicroAmpsOrig += microAmps; // microAmps;
+    microAmps-=zero;
+    // update accumulators
+    if (readings==0) {
+      minBusMicroAmps = maxBusMicroAmps = microAmps;
+    } else {
+      if (microAmps<minBusMicroAmps) 
+        minBusMicroAmps = microAmps;
+      if (microAmps>maxBusMicroAmps)
+        maxBusMicroAmps = microAmps;
+    }
+    sumBusMicroAmps += microAmps;     // Add current value to sum
+    totalBusMicroAmps += microAmps * 200/1000;
+    readings++;    
+    miliVolts = HAL_ADC_GetValue(&hadc1)*14970/4096;
+    sumBusMillVolts += miliVolts; // 14970 = 6 * 24950    
 
     if (true || serialEnable) {
       itoa(microAmps,pageBuf,10);
@@ -701,7 +703,7 @@ void StartDefaultTask(void const * argument)
 
 //	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
 
-    if (cicleCounter++>=71) {
+    if ((cicleCounter++)>=500) {
       // make data snapshot
       lsumBusMillVolts=sumBusMillVolts;
       lsumBusMicroAmps=sumBusMicroAmps;

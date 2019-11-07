@@ -130,7 +130,7 @@ void updateScreenX(void const *arg) {
     calibrationStep--;
   }
 
-//	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);    
+	  // HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);    
 
     // voltage
     oled.clear();
@@ -199,6 +199,6 @@ void updateScreenX(void const *arg) {
     printFloat(v,4,false,"mAh");
 
     oled.update();
-//	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);    
+	  // HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);    
   } 
 }
