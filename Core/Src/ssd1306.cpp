@@ -235,9 +235,9 @@ void SSD1306::update()
 {
     hv_set_column_address(0, 127);
     hv_set_page_address(0, 7);
-    
-    for (int i = 0; i < 1024; i++)
-        _send_data(_screen[i]);
+
+    HAL_GPIO_WritePin(DISPDC_GPIO_Port, DISPDC_Pin, GPIO_PIN_SET);
+    HAL_SPI_Transmit_DMA(&hspi1,_screen,1024);//    
 }
 
 void SSD1306::set_pixel(int x, int y)
