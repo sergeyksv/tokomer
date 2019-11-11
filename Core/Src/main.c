@@ -622,6 +622,7 @@ void StartDefaultTask(void const * argument)
   HAL_TIM_RegisterCallback(&htim3,HAL_TIM_PERIOD_ELAPSED_CB_ID,&USR_TIM_PeriodElapsedCallback);
 
   int cicleCounter =0;
+  int32_t  absMicroAmps =0;
 
   for(;;)
   {
@@ -640,7 +641,8 @@ void StartDefaultTask(void const * argument)
         skip--;
 
     // adjust range
-    if (minRange<2 && microAmps < 11000) {
+    absMicroAmps = abs(microAmps);
+    if (minRange<2 && absMicroAmps < 11000) {
         if (range!=1) {
           HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_SET);
           HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_RESET);
@@ -648,7 +650,7 @@ void StartDefaultTask(void const * argument)
           range = 1;
           skip=1;
         }   
-    } else if (minRange<3 && microAmps < 110000) {
+    } else if (minRange<3 && absMicroAmps < 110000) {
         if (range!=2) {
           HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_SET);
           HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_RESET);

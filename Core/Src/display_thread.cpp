@@ -30,9 +30,10 @@ int calibrationStep=0;
 
 char sbuf[32];
 void printFloat(float v, int8_t maxDigits, bool enlargeForMinus, const char* suffix) {
+    float ov = v; v=abs(v);
     itoa((int)v,sbuf,10);
     int16_t i = maxDigits-strlen(sbuf);
-    if (v<0) { oled.putc('-'); i-=enlargeForMinus?0:1; }
+    if (ov<0) { oled.putc('-'); i-=enlargeForMinus?0:1; }
     oled.puts(sbuf);
     if (i>0) {
         i = i==1?10:(i==2?100:1000);
