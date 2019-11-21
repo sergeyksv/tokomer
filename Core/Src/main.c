@@ -116,7 +116,7 @@ int main(void)
   MX_ADC1_Init();
   MX_USART1_UART_Init();
   MX_TIM3_Init();
-    /* USER CODE BEGIN 2 */
+  /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
 
@@ -240,7 +240,7 @@ static void MX_ADC1_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_0;
   sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+  sConfig.SamplingTime = ADC_SAMPLETIME_71CYCLES_5;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -443,7 +443,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, RANGE2_Pin|RANGE1_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, RANGE2_Pin|ONEKLOAD_Pin|RANGE1_Pin|EN_VOUT_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : LED_Pin */
   GPIO_InitStruct.Pin = LED_Pin;
@@ -456,7 +456,7 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pin = DISPDC_Pin|DISPRES_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pin : INA_ALERT_Pin */
@@ -465,17 +465,22 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(INA_ALERT_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : RANGE3_Pin RANGE2_Pin RANGE1_Pin */
-  GPIO_InitStruct.Pin = RANGE3_Pin|RANGE2_Pin|RANGE1_Pin;
+  /*Configure GPIO pins : RANGE3_Pin RANGE2_Pin ONEKLOAD_Pin RANGE1_Pin */
+  GPIO_InitStruct.Pin = RANGE3_Pin|RANGE2_Pin|ONEKLOAD_Pin|RANGE1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : BTN_LEFT_Pin BTN_SEL_Pin BTN_UP_Pin BTN_RIGHT_Pin 
-                           BTN_DOWN_Pin */
-  GPIO_InitStruct.Pin = BTN_LEFT_Pin|BTN_SEL_Pin|BTN_UP_Pin|BTN_RIGHT_Pin 
-                          |BTN_DOWN_Pin;
+  /*Configure GPIO pin : EN_VOUT_Pin */
+  GPIO_InitStruct.Pin = EN_VOUT_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(EN_VOUT_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : KEY1_Pin KEY2_Pin KEY3_Pin */
+  GPIO_InitStruct.Pin = KEY1_Pin|KEY2_Pin|KEY3_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
@@ -489,6 +494,8 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 osThreadId osMainThreadId;
 osThreadId osUpdateScreenThreadId;
+osThreadId osflushUsbBufferThreadId;
+
 uint8_t buf[3];
 int16_t inaRes;
 void USR_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c) {
@@ -511,11 +518,13 @@ int64_t  totalBusMicroAmps    =    0;
 uint32_t readings             =    0;
 int16_t  zero             = 11;
 uint8_t  skip             = 0;
-uint8_t  power            = 1;
+uint8_t  power            = 0;
 uint8_t  range            = 3;
 uint8_t  minRange         = 0;
 bool serialEnable = false;
 uint16_t ranges[4]={0,50,500,5000};
+uint16_t voltageK = 19700;
+uint16_t refreshT = 500;
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
@@ -542,14 +551,30 @@ int32_t  lnow;
 #include "display_thread.h"
 osThreadDef (updateScreen, updateScreenX, osPriorityIdle, 1, 200); 
 
-char	bufUsb[2][1000];
+// using 2 buffers to pack data to best suite for 64 byte CDC blocks
+#define USB_SERIAL_TX_BUF_SIZE 64
+char	bufUsb[2][USB_SERIAL_TX_BUF_SIZE];
 uint16_t usbLen=0;
 uint8_t usbPage=0;
+uint8_t* usbToSendBuf=NULL;
+uint16_t usbToSendSize=0;
+
+// flush buffer thread, send chunks upon fullfilment
+void flushUsbBuffer(void const *arg) {
+  osflushUsbBufferThreadId = osThreadGetId();
+
+  for(;;)
+  {
+    osSignalWait(0x1,1000);    
+    CDC_Transmit_FS(usbToSendBuf,usbToSendSize);    
+  }
+}
+osThreadDef (flushUsbThread, flushUsbBuffer, osPriorityBelowNormal, 1, 200); 
 
 #include <math.h>
 #include "eeprom.h"
 
-uint16_t VirtAddVarTab[NumbOfVar] = {0x1700, 0x1701, 0x1702};
+uint16_t VirtAddVarTab[NumbOfVar] = {0x1700, 0x1701, 0x1702, 0x1703};
 
 /* USER CODE END 4 */
 
@@ -567,6 +592,7 @@ void StartDefaultTask(void const * argument)
   /* USER CODE BEGIN 5 */
   osMainThreadId = osThreadGetId ();
   osThreadCreate(osThread (updateScreen), NULL);  
+  osThreadCreate(osThread (flushUsbThread), NULL);    
   HAL_TIM_Base_Start_IT(&htim3);
 
   HAL_FLASH_Unlock();
@@ -577,6 +603,7 @@ void StartDefaultTask(void const * argument)
   EE_ReadVariable(0x1700,&ee_val); zero = ee_val;
   EE_ReadVariable(0x1701,&ranges[2]);
   EE_ReadVariable(0x1702,&ranges[3]);  
+  EE_ReadVariable(0x1703,&voltageK);  
 
   /* Infinite loop */
   char*  pageBuf=bufUsb[usbPage];
@@ -641,6 +668,7 @@ void StartDefaultTask(void const * argument)
         skip--;
 
     // adjust range
+    HAL_GPIO_WritePin(EN_VOUT_GPIO_Port, EN_VOUT_Pin, power?GPIO_PIN_SET:GPIO_PIN_RESET);    
     absMicroAmps = abs(microAmps);
     if (minRange<2 && absMicroAmps < 11000) {
         if (range!=1) {
@@ -680,23 +708,28 @@ void StartDefaultTask(void const * argument)
     sumBusMicroAmps += microAmps;     // Add current value to sum
     totalBusMicroAmps += microAmps * 200/1000;
     readings++;    
-    miliVolts = HAL_ADC_GetValue(&hadc1)*14970/4096;
-    sumBusMillVolts += miliVolts; // 14970 = 6 * 24950    
+    miliVolts = HAL_ADC_GetValue(&hadc1)*voltageK/4096; // 18000/4096;
+    sumBusMillVolts += miliVolts; // 14970 = 6 * 3000 (3.0000 v)    
 
-    if (true || serialEnable) {
+    if (serialEnable) {
       itoa(microAmps,pageBuf,10);
       uint8_t len=strlen(pageBuf);
       pageBuf += len;
-//        *(scbuf++)=',';
-//        slen+=len+1;
-//        itoa(miliVolts,scbuf,10);
-//        len=strlen(scbuf);
-//        scbuf += len;
-      *(pageBuf++)='\r';
+      *(pageBuf++)=',';
+      usbLen+=len+1;
+      itoa(miliVolts/10,pageBuf,10);
+      len=strlen(pageBuf);
+      pageBuf += len;
       *(pageBuf++)='\n';    
-      usbLen+=len+2;
-      if (usbLen>900) {
-        CDC_Transmit_FS((uint8_t *)bufUsb[usbPage],usbLen);
+      usbLen+=len+1;
+
+      // 14 is maxium line size that we can send -1800000,1200n
+      // so as soon as have less than that we need to send them out
+      if (usbLen>USB_SERIAL_TX_BUF_SIZE-14) {
+        usbToSendBuf = (uint8_t *)bufUsb[usbPage];
+        usbToSendSize = usbLen;
+        // signalize that we have some data to send
+        osSignalSet (osflushUsbBufferThreadId, 0x1);        
         usbPage = (usbPage+1)%2; 
         usbLen = 0;
         pageBuf = bufUsb[usbPage];
@@ -705,7 +738,7 @@ void StartDefaultTask(void const * argument)
 
 //	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
 
-    if ((cicleCounter++)>=500) {
+    if ((cicleCounter++)>=refreshT) {
       // make data snapshot
       lsumBusMillVolts=sumBusMillVolts;
       lsumBusMicroAmps=sumBusMicroAmps;

@@ -71,18 +71,18 @@ void Error_Handler(void);
 #define RANGE3_GPIO_Port GPIOB
 #define RANGE2_Pin GPIO_PIN_1
 #define RANGE2_GPIO_Port GPIOB
+#define ONEKLOAD_Pin GPIO_PIN_2
+#define ONEKLOAD_GPIO_Port GPIOB
 #define RANGE1_Pin GPIO_PIN_10
 #define RANGE1_GPIO_Port GPIOB
-#define BTN_LEFT_Pin GPIO_PIN_11
-#define BTN_LEFT_GPIO_Port GPIOB
-#define BTN_SEL_Pin GPIO_PIN_12
-#define BTN_SEL_GPIO_Port GPIOB
-#define BTN_UP_Pin GPIO_PIN_13
-#define BTN_UP_GPIO_Port GPIOB
-#define BTN_RIGHT_Pin GPIO_PIN_14
-#define BTN_RIGHT_GPIO_Port GPIOB
-#define BTN_DOWN_Pin GPIO_PIN_15
-#define BTN_DOWN_GPIO_Port GPIOB
+#define EN_VOUT_Pin GPIO_PIN_12
+#define EN_VOUT_GPIO_Port GPIOB
+#define KEY1_Pin GPIO_PIN_4
+#define KEY1_GPIO_Port GPIOB
+#define KEY2_Pin GPIO_PIN_5
+#define KEY2_GPIO_Port GPIOB
+#define KEY3_Pin GPIO_PIN_9
+#define KEY3_GPIO_Port GPIOB
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */

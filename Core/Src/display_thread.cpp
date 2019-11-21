@@ -10,6 +10,7 @@ SSD1306 oled;
 
 float plot[128],plot1[128],plot2[128], pmax,pmin,scale;
 uint8_t pidx=0;
+extern uint8_t  power;
 extern uint64_t lsumBusMillVolts;
 extern int64_t  lsumBusMicroAmps;
 extern int32_t  lmaxBusMicroAmps;
@@ -24,6 +25,8 @@ extern int64_t  totalBusMicroAmps;
 extern uint8_t  minRange;
 extern bool serialEnable;
 extern uint16_t ranges[4];
+extern uint16_t voltageK;
+extern uint16_t refreshT;
 
 int longPress=0;
 int calibrationStep=0;
@@ -63,75 +66,90 @@ void updateScreenX(void const *arg) {
     // code here normall executes every ~100ms
 
     // handling button presses
-    if (HAL_GPIO_ReadPin(BTN_UP_GPIO_Port,BTN_UP_Pin)==GPIO_PIN_RESET) {
+    if (HAL_GPIO_ReadPin(KEY1_GPIO_Port,KEY1_Pin)==GPIO_PIN_RESET) {
       longPress++;
-      if (longPress>50 && calibrationStep==0) {
-        calibrationStep=10;
-        longPress=0;        
+      if (longPress>5) {
+        longPress=0;
+        totalBusMicroAmps = 0;
+        lnow=0;
+        for (int i=0; i<128; i++) {
+          plot[i]=0;
+          plot1[i]=0;
+          plot2[i]=0;
+        }           
       }
     }
-    if (HAL_GPIO_ReadPin(BTN_RIGHT_GPIO_Port,BTN_RIGHT_Pin)==GPIO_PIN_RESET) {
+
+    if (HAL_GPIO_ReadPin(KEY2_GPIO_Port,KEY2_Pin)==GPIO_PIN_RESET) {
       longPress++;
-      if (longPress>50) {
-        longPress=0;
-        zero = lsumBusMicroAmpsOrig / lreadings;
-        EE_WriteVariable(0x1700,zero);
-        longPress=0;
-        totalBusMicroAmps = 0;
-        lnow=0;
-        for (int i=0; i<128; i++) {
-          plot[i]=0;
-          plot1[i]=0;
-          plot2[i]=0;
-        }        
-      }
-    }       
-    if (HAL_GPIO_ReadPin(BTN_SEL_GPIO_Port,BTN_SEL_Pin)==GPIO_PIN_RESET) {
-      longPress++;
-      if (longPress>10) {
-        longPress=0;
-        totalBusMicroAmps = 0;
-        lnow=0;
-        for (int i=0; i<128; i++) {
-          plot[i]=0;
-          plot1[i]=0;
-          plot2[i]=0;
-        }
-      }
-    }  
-    if (HAL_GPIO_ReadPin(BTN_LEFT_GPIO_Port,BTN_LEFT_Pin)==GPIO_PIN_RESET) {
-      longPress++;
-      if (longPress>2) {
-        longPress=0;
+      if (longPress>5) {
+        longPress=0;        
         serialEnable = !serialEnable;
+      }
+    }
+    
+    if (HAL_GPIO_ReadPin(KEY3_GPIO_Port,KEY3_Pin)==GPIO_PIN_RESET) {
+      longPress++;
+      if (longPress>1) {
+        longPress=0;
+        if (power==1) 
+          power=0;
+        else {
+          calibrationStep=10;
+          longPress=0;   
+        }
       }
     }
 
     // calibration
-  if (calibrationStep>0) {
-    switch (calibrationStep) {
-      case 10:      // set 3 rd range
-        minRange = 3;
-        break;
-      case 9:
-        break;      // wait one cycle
-      case 8:
-        ranges[3] = (int)(((float)(lsumBusMillVolts/lreadings)/(lsumBusMicroAmps/lreadings))*ranges[3]);
-        EE_WriteVariable(0x1702,ranges[3]);     
-        minRange = 2;
-      case 7:
-        break;      // wait one cycle
-      case 6:
-        ranges[2] = (int)(((float)(lsumBusMillVolts/lreadings)/(lsumBusMicroAmps/lreadings))*ranges[2]);
-        EE_WriteVariable(0x1701,ranges[2]);     
-        minRange = 0;
-        calibrationStep = 0;
-        break;
+    if (calibrationStep>0) {
+      switch (calibrationStep) {
+        case 10:      // set 3 rd range
+          HAL_GPIO_WritePin(ONEKLOAD_GPIO_Port, ONEKLOAD_Pin, GPIO_PIN_SET);      
+          minRange = 0;
+          break;
+        case 9:
+          break;      // wait one cycle
+        case 8:
+          minRange = 1;
+          // calibration current in ua on 1K is voltage in mv
+          voltageK = (int)(((float)(lsumBusMicroAmps/lreadings)/(lsumBusMillVolts/lreadings))*voltageK);
+          EE_WriteVariable(0x1703,voltageK);
+          break;
+        case 7:
+          break;      // wait one cycle
+        case 6:
+          minRange = 2;
+          ranges[3] = (int)(((float)(lsumBusMillVolts/lreadings)/(lsumBusMicroAmps/lreadings))*ranges[3]);
+          EE_WriteVariable(0x1702,ranges[3]);     
+        case 5:
+          break;      // wait one cycle
+        case 4:
+          minRange = 0;
+          HAL_GPIO_WritePin(ONEKLOAD_GPIO_Port, ONEKLOAD_Pin, GPIO_PIN_RESET);      
+          ranges[2] = (int)(((float)(lsumBusMillVolts/lreadings)/(lsumBusMicroAmps/lreadings))*ranges[2]);
+          EE_WriteVariable(0x1701,ranges[2]);     
+          break;
+        case 3:
+          break;      // wait one cycle
+        case 2:
+          zero = lsumBusMicroAmpsOrig / lreadings;
+          EE_WriteVariable(0x1700,zero);
+          totalBusMicroAmps = 0;
+          lnow=0;
+          for (int i=0; i<128; i++) {
+            plot[i]=0;
+            plot1[i]=0;
+            plot2[i]=0;
+          }        
+          break;
+        case 1:
+          calibrationStep = 0;
+          power=1;
+          break;
+      }
+      calibrationStep--;
     }
-    calibrationStep--;
-  }
-
-	  // HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);    
 
     // voltage
     oled.clear();
@@ -171,35 +189,36 @@ void updateScreenX(void const *arg) {
     }
     if (pmax==pmin) pmax=pmin+0.001; // protect from device by zero
     scale = 36.0/(pmax-pmin);   
-    for (uint8_t i=0; i<128; i++) {
-        uint8_t idx = (i+pidx)%128;
-        uint8_t min = scale*(plot1[idx]-pmin)-1;
-        uint8_t max = scale*(plot[idx]-pmin)+1;
-        oled.line(i,54-min,i,54-max);
-        if (max-min>4) {
-          oled.clear_pixel(i,53-scale*(plot2[idx]-pmin));
-        }
-    }   
+    if (power==1) {
+      for (uint8_t i=0; i<128; i++) {
+          uint8_t idx = (i+pidx)%128;
+          uint8_t min = scale*(plot1[idx]-pmin)-1;
+          uint8_t max = scale*(plot[idx]-pmin)+1;
+          oled.line(i,54-min,i,54-max);
+          if (max-min>4) {
+            oled.clear_pixel(i,53-scale*(plot2[idx]-pmin));
+          }
+      }  
 
-    // current mA
-    oled.setCursor(0,1);
-    printFloat(v,4,false,"mA");
+      // current mA
+      oled.setCursor(0,1);
+      printFloat(v,4,false,"mA");
 
-    // max value on grath
-    v = pmin;
-    oled.setCursor(0,7);
-    printFloat(v,4,true,"mA");
+      // max value on grath
+      v = pmin;
+      oled.setCursor(0,7);
+      printFloat(v,4,true,"mA");
 
-    v = pmax;
-    oled.setCursor(9,7);
-    printFloat(v,4,false,"mA");
+      v = pmax;
+      oled.setCursor(9,7);
+      printFloat(v,4,false,"mA");
 
-    // mAh
-    oled.setCursor(8,1);
-    v = (float)(ltotalBusMicroAmps/lnow)/1000;
-    printFloat(v,4,false,"mAh");
+      // mAh
+      oled.setCursor(8,1);
+      v = (float)(ltotalBusMicroAmps/lnow)/1000;
+      printFloat(v,4,false,"mAh");
+    }
 
     oled.update();
-	  // HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);    
   } 
 }
