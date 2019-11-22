@@ -510,6 +510,8 @@ void USR_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 int32_t  miliVolts =0;
 int32_t  microAmps =0;
 uint64_t sumBusMillVolts =         0;
+int32_t  maxBusMillVolts =         0;
+int32_t  minBusMillVolts =         0;
 int64_t  sumBusMicroAmps =         0;
 int32_t  minBusMicroAmps =         0;
 int32_t  maxBusMicroAmps =         0;
@@ -540,6 +542,8 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 }
 
 uint64_t lsumBusMillVolts;
+int32_t  lmaxBusMillVolts;
+int32_t  lminBusMillVolts;
 int64_t  lsumBusMicroAmps;
 int32_t  lmaxBusMicroAmps;
 int32_t  lminBusMicroAmps;
@@ -696,7 +700,7 @@ void StartDefaultTask(void const * argument)
 
     sumBusMicroAmpsOrig += microAmps; // microAmps;
     microAmps-=zero;
-    // update accumulators
+    // update current accumulators
     if (readings==0) {
       minBusMicroAmps = maxBusMicroAmps = microAmps;
     } else {
@@ -707,9 +711,19 @@ void StartDefaultTask(void const * argument)
     }
     sumBusMicroAmps += microAmps;     // Add current value to sum
     totalBusMicroAmps += microAmps * 200/1000;
-    readings++;    
     miliVolts = HAL_ADC_GetValue(&hadc1)*voltageK/4096; // 18000/4096;
     sumBusMillVolts += miliVolts; // 14970 = 6 * 3000 (3.0000 v)    
+
+    // update voltage accumulators
+    if (readings==0) {
+      minBusMillVolts = maxBusMillVolts = miliVolts;
+    } else {
+      if (miliVolts<minBusMillVolts) 
+        minBusMillVolts = miliVolts;
+      if (miliVolts>maxBusMillVolts)
+        maxBusMillVolts = miliVolts;
+    }
+    readings++;    
 
     if (serialEnable) {
       itoa(microAmps,pageBuf,10);
@@ -741,6 +755,8 @@ void StartDefaultTask(void const * argument)
     if ((cicleCounter++)>=refreshT) {
       // make data snapshot
       lsumBusMillVolts=sumBusMillVolts;
+      lminBusMillVolts=minBusMillVolts;
+      lmaxBusMillVolts=maxBusMillVolts;            
       lsumBusMicroAmps=sumBusMicroAmps;
       lminBusMicroAmps=minBusMicroAmps;
       lmaxBusMicroAmps=maxBusMicroAmps;
