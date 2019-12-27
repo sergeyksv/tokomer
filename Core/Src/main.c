@@ -525,7 +525,7 @@ uint8_t  range            = 3;
 uint8_t  minRange         = 0;
 bool serialEnable = false;
 uint16_t ranges[4]={0,50,500,5000};
-uint16_t voltageK = 19700;
+uint16_t voltageK = 20589;
 uint16_t refreshT = 500;
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)

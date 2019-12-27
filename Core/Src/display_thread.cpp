@@ -124,7 +124,7 @@ void updateScreenX(void const *arg) {
           EE_WriteVariable(0x1700,zero);        
           HAL_GPIO_WritePin(ONEKLOAD_GPIO_Port, ONEKLOAD_Pin, GPIO_PIN_SET);      
           minRange = 0;
-          voltageK = 19700;
+          voltageK = 20589;
           break;
         case 9:
           break;      // wait one cycle
@@ -151,8 +151,10 @@ void updateScreenX(void const *arg) {
           EE_WriteVariable(0x1701,ranges[2]);     
           break;
         case 3:
-          break;      // wait one cycle
+          power=1;
         case 2:
+          break;      // wait one cycle
+        case 1:
           totalBusMicroAmps = 0;
           lnow=0;
           for (int i=0; i<128; i++) {
@@ -164,7 +166,6 @@ void updateScreenX(void const *arg) {
             plot5[i]=0;
           }        
           calibrationStep = 0;
-          power=1;
           break;
       }
       calibrationStep--;
@@ -182,11 +183,12 @@ void updateScreenX(void const *arg) {
     }
 
     // time
-    oled.setCursor(8,0); 
-    itoa(100+lnow/3600000,sbuf,10);
-    oled.puts(sbuf+1);
+
+    itoa(lnow/3600000,sbuf,10);
+    oled.setCursor(10-strlen(sbuf),0); 
+    oled.puts(sbuf);
     oled.putc(':');  
-    itoa(100+lnow/60000,sbuf,10);
+    itoa(100+(lnow/60000)%60,sbuf,10);
     oled.puts(sbuf+1);
     oled.putc(':');  
     itoa(100+(lnow/1000)%60,sbuf,10);
