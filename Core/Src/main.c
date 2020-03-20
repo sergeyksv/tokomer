@@ -521,12 +521,18 @@ uint32_t readings             =    0;
 int16_t  zero             = 11;
 uint8_t  skip             = 0;
 uint8_t  power            = 0;
+uint8_t  power_state      = 0; 
 uint8_t  range            = 3;
+uint8_t  range_last       = 3;
 uint8_t  minRange         = 0;
 bool serialEnable = false;
 uint16_t ranges[4]={0,50,500,5000};
 uint16_t voltageK = 20589;
 uint16_t refreshT = 500;
+uint8_t  rangeRiseT = 3; // with 10k/4.7k rise time is ~200us, at that time measurment can'be valid
+                         // our cycle now is eaxactly 200us (rangeRiseT=1)
+                         // because change can happen unaligned to mesurment cycle we need to wait 2T
+                         // but for safety probably better 3T
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
@@ -537,7 +543,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_RESET);
     range = 3;  
-    skip=1;  
+    skip=rangeRiseT;  
   } 
 }
 
@@ -658,7 +664,6 @@ void StartDefaultTask(void const * argument)
   for(;;)
   {
     osSignalWait(0x1,10);
-//	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
     HAL_ADC_Start(&hadc1);
 	  HAL_I2C_Master_Receive_IT(&hi2c1,0x80,buf,2);
     osSignalWait(0x2,10);
@@ -669,10 +674,13 @@ void StartDefaultTask(void const * argument)
       microAmps = round((float)microAmps/100);
     } 
     else 
-        skip--;
+       skip--;
 
     // adjust range
-    HAL_GPIO_WritePin(EN_VOUT_GPIO_Port, EN_VOUT_Pin, power?GPIO_PIN_SET:GPIO_PIN_RESET);    
+    if (power!=power_state) {
+      HAL_GPIO_WritePin(EN_VOUT_GPIO_Port, EN_VOUT_Pin, power?GPIO_PIN_SET:GPIO_PIN_RESET); 
+      power_state=power;
+    }   
     absMicroAmps = abs(microAmps);
     if (minRange<2 && absMicroAmps < 11000) {
         if (range!=1) {
@@ -680,7 +688,7 @@ void StartDefaultTask(void const * argument)
           HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_RESET);
           HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_RESET);
           range = 1;
-          skip=1;
+          skip=rangeRiseT;
         }   
     } else if (minRange<3 && absMicroAmps < 110000) {
         if (range!=2) {
@@ -688,14 +696,14 @@ void StartDefaultTask(void const * argument)
           HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_RESET);
           HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_RESET);
           range = 2;
-          skip=1;
+          skip=rangeRiseT;
         }        
     } else if (range!=3) {
       HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_SET);
       HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_RESET);
       HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_RESET);
       range = 3;  
-      skip=1;      
+      skip=rangeRiseT;      
     }
 
     sumBusMicroAmpsOrig += microAmps; // microAmps;
@@ -750,8 +758,6 @@ void StartDefaultTask(void const * argument)
       }
     }
 
-//	  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
-
     if ((cicleCounter++)>=refreshT) {
       // make data snapshot
       lsumBusMillVolts=sumBusMillVolts;
@@ -774,6 +780,15 @@ void StartDefaultTask(void const * argument)
       // signaling udpate screen thread
       osSignalSet (osUpdateScreenThreadId, 0x1);
       cicleCounter=0;
+
+      // blink with led if range was changed
+      if (range!=range_last) { 
+        range_last=range;
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+      } else {
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+      }
+      
     }
   }
   /* USER CODE END 5 */ 
