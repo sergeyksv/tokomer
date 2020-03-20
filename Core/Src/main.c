@@ -682,23 +682,36 @@ void StartDefaultTask(void const * argument)
       power_state=power;
     }   
     absMicroAmps = abs(microAmps);
-    if (minRange<2 && absMicroAmps < 11000) {
-        if (range!=1) {
+
+    // to put into right range when forced fake range control current
+    minRange=2;
+    if (minRange!=0) {
+      if (minRange==2)
+        absMicroAmps += 13000;
+      else
+        absMicroAmps += 130000;
+    }
+    
+    // range 1 locks if current < 11 ma
+    if (range!=1 && absMicroAmps < 11000) {
           HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_SET);
           HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_RESET);
           HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_RESET);
           range = 1;
           skip=rangeRiseT;
-        }   
-    } else if (minRange<3 && absMicroAmps < 110000) {
-        if (range!=2) {
+    }
+    
+    // range 2 lock if current grows above 12 ma or reduces less than 110    
+    if (range!=2 && absMicroAmps > 12000 && absMicroAmps < 110000) {
           HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_SET);
           HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_RESET);
           HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_RESET);
           range = 2;
           skip=rangeRiseT;
-        }        
-    } else if (range!=3) {
+    }
+    
+    // range 3 locks for current bigger than 120 ma
+    if (range!=3 && absMicroAmps > 120000) {
       HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_SET);
       HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_RESET);
       HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_RESET);
