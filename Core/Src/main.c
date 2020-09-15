@@ -684,7 +684,6 @@ void StartDefaultTask(void const * argument)
     absMicroAmps = abs(microAmps);
 
     // to put into right range when forced fake range control current
-    minRange=2;
     if (minRange!=0) {
       if (minRange==2)
         absMicroAmps += 13000;
