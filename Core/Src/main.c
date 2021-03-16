@@ -526,6 +526,7 @@ uint32_t readings             =    0;
 int16_t  zero             = 11;
 uint8_t  skip             = 0;
 uint8_t  power            = 0;
+uint8_t  overload         = 0;
 uint8_t  power_state      = 0; 
 uint8_t  ina226           = 0;
 uint8_t  ina226_state     = 0;
@@ -533,7 +534,7 @@ uint8_t  range            = 3;
 uint8_t  range_last       = 3;
 uint8_t  minRange         = 0;
 bool serialEnable = false;
-uint16_t ranges[4]={0,50,475,4200};
+uint16_t ranges[4]={0,128,1222,10683};
 uint16_t voltageK = 17000;
 uint16_t refreshT = 500;
 uint8_t  rangeRiseT = 3; // with 10k/4.7k rise time is ~200us, at that time measurment can'be valid
@@ -706,10 +707,15 @@ void StartDefaultTask(void const * argument)
 	  HAL_I2C_Master_Receive_IT(&hi2c1,0x80,buf,2);
     osSignalWait(0x2,10);
     if (skip==0) {
+      // virtual current breaker, on max range max values, STOP!
+      if (range==3 && (inaRes>=0x7fff || inaRes<=-0x7fff)) {
+        power = 0;
+        overload = true;
+      }
       // we might need to skeep measurement which happened when we switch ranges
       microAmps = inaRes;
-      microAmps *= ranges[range];
-      microAmps = round((float)microAmps/100);
+      microAmps = (microAmps*ranges[range])>>8;
+//      microAmps = round((float)microAmps/100);
     } 
     else 
        skip--;

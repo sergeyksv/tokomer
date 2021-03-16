@@ -31,6 +31,7 @@ extern bool serialEnable;
 extern uint16_t ranges[4];
 extern uint16_t voltageK;
 extern uint16_t refreshT;
+extern uint8_t  overload;
 
 //#define SERIALDEBUG
 #ifdef SERIALDEBUG
@@ -127,6 +128,7 @@ void updateScreenX(void const *arg) {
           power=0;
         else
           calibrationStep=9;
+        overload = 0;
       }
     }
 
@@ -150,7 +152,7 @@ void updateScreenX(void const *arg) {
           break;
         case 7:
           minRange = 3;
-          ranges[3] = 4199;          
+          ranges[3] = 10700;          
           // calibration current in ua on 1K is voltage in mv
           voltageK = (lsumBusMillVoltsOrig*voltageK)/lsumBusMillVolts;
           _DEBUG("INA226 %u mV, STM32 %u mV, INA226 %u uA\n",(uint)lsumBusMillVoltsOrig/lreadings,(uint)lsumBusMillVolts/lreadings,(uint)lsumBusMicroAmps/lreadings);
@@ -158,7 +160,7 @@ void updateScreenX(void const *arg) {
           break;
         case 5:
           minRange = 2;
-          ranges[2] = 478;
+          ranges[2] = 1222;
           ranges[3] = (lsumBusMillVoltsOrig*ranges[3])/lsumBusMicroAmpsOrig;
           _DEBUG("INA226 %u mV, STM32 %u mV, INA226 %u uA\n",(uint)lsumBusMillVoltsOrig/lreadings,(uint)lsumBusMillVolts/lreadings,(uint)lsumBusMicroAmps/lreadings);
           _DEBUG("Range 3 K %u\n",ranges[3]);   
@@ -269,6 +271,10 @@ void updateScreenX(void const *arg) {
       printFloat((float)(ltotalBusMicroAmps/lnow)/1000,4,false,"mAh");
     }
 
+    if (overload) {
+        oled.setCursor(3,3); 
+        oled.puts("overload !!");
+    }
     oled.update();
   } 
 }
