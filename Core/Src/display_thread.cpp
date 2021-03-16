@@ -11,6 +11,8 @@ SSD1306 oled;
 float plot[128],plot1[128],plot2[128],plot3[128],plot4[128],plot5[128],pmax,pmin,scale;
 uint8_t pidx=0;
 extern uint8_t  power;
+extern uint8_t  ina226;
+extern uint64_t lsumBusMillVoltsOrig;
 extern uint64_t lsumBusMillVolts;
 extern int32_t  lmaxBusMillVolts;
 extern int32_t  lminBusMillVolts;
@@ -29,6 +31,25 @@ extern bool serialEnable;
 extern uint16_t ranges[4];
 extern uint16_t voltageK;
 extern uint16_t refreshT;
+
+//#define SERIALDEBUG
+#ifdef SERIALDEBUG
+#include <stdarg.h>
+extern UART_HandleTypeDef huart1;
+char debugstring[128];
+int debugprintf (const char * format, ...) {
+    va_list argptr;
+    va_start (argptr, format);
+    vsnprintf(debugstring,128,format,argptr);
+    va_end(argptr);
+    HAL_UART_Transmit(&huart1,(uint8_t *)debugstring,strlen(debugstring),5000);
+    return 0;
+}
+#define _DEBUG(format, ...) debugprintf(format, __VA_ARGS__)
+#else
+#define _DEBUG(format, ...)
+#endif
+
 
 enum button{NOKEY,KEY1,KEY2,KEY3};
 uint16_t buttonTime;
@@ -105,7 +126,7 @@ void updateScreenX(void const *arg) {
         if (power==1) 
           power=0;
         else
-          calibrationStep=10;
+          calibrationStep=9;
       }
     }
 
@@ -119,41 +140,38 @@ void updateScreenX(void const *arg) {
     // calibration
     if (calibrationStep>0) {
       switch (calibrationStep) {
-        case 10:      // set 3 rd range
-          zero = lsumBusMicroAmpsOrig / lreadings;
-          EE_WriteVariable(0x1700,zero);        
-          HAL_GPIO_WritePin(ONEKLOAD_GPIO_Port, ONEKLOAD_Pin, GPIO_PIN_SET);      
+        case 9:      // set 3 rd range
           minRange = 0;
-          voltageK = 20589;
-          break;
-        case 9:
-          break;      // wait one cycle
-        case 8:
-          minRange = 3;
-          ranges[3] = 5000;
-          // calibration current in ua on 1K is voltage in mv
-          voltageK = (int)(((float)(lsumBusMicroAmps/lreadings)/(float)(lsumBusMillVolts/lreadings))*voltageK);
-          EE_WriteVariable(0x1703,voltageK);
+          voltageK = 17000;    
+          ina226 = 1;       
+          HAL_GPIO_WritePin(ONEKLOAD_GPIO_Port, ONEKLOAD_Pin, GPIO_PIN_SET); 
+          zero = lsumBusMicroAmpsOrig / lreadings;
+          _DEBUG("Zero I %d\n",zero);     
           break;
         case 7:
-          break;      // wait one cycle
-        case 6:
-          minRange = 2;
-          ranges[2] = 500;
-          ranges[3] = (int)(((float)(lsumBusMillVolts/lreadings)/(float)(lsumBusMicroAmps/lreadings))*ranges[3]);
-          EE_WriteVariable(0x1702,ranges[3]);     
+          minRange = 3;
+          ranges[3] = 4199;          
+          // calibration current in ua on 1K is voltage in mv
+          voltageK = (lsumBusMillVoltsOrig*voltageK)/lsumBusMillVolts;
+          _DEBUG("INA226 %u mV, STM32 %u mV, INA226 %u uA\n",(uint)lsumBusMillVoltsOrig/lreadings,(uint)lsumBusMillVolts/lreadings,(uint)lsumBusMicroAmps/lreadings);
+          _DEBUG("Voltage K %u\n",voltageK);
+          break;
         case 5:
-          break;      // wait one cycle
-        case 4:
-          minRange = 0;
-          HAL_GPIO_WritePin(ONEKLOAD_GPIO_Port, ONEKLOAD_Pin, GPIO_PIN_RESET);      
-          ranges[2] = (int)(((float)(lsumBusMillVolts/lreadings)/(float)(lsumBusMicroAmps/lreadings))*ranges[2]);
-          EE_WriteVariable(0x1701,ranges[2]);     
+          minRange = 2;
+          ranges[2] = 478;
+          ranges[3] = (lsumBusMillVoltsOrig*ranges[3])/lsumBusMicroAmpsOrig;
+          _DEBUG("INA226 %u mV, STM32 %u mV, INA226 %u uA\n",(uint)lsumBusMillVoltsOrig/lreadings,(uint)lsumBusMillVolts/lreadings,(uint)lsumBusMicroAmps/lreadings);
+          _DEBUG("Range 3 K %u\n",ranges[3]);   
           break;
         case 3:
+          minRange = 0;
           power=1;
-        case 2:
-          break;      // wait one cycle
+          ina226=0;
+          HAL_GPIO_WritePin(ONEKLOAD_GPIO_Port, ONEKLOAD_Pin, GPIO_PIN_RESET);      
+          ranges[2] = (lsumBusMillVoltsOrig*ranges[2])/lsumBusMicroAmps;
+          _DEBUG("INA226 %u mV, STM32 %u mV, INA226 %u uA\n",(uint)lsumBusMillVoltsOrig/lreadings,(uint)lsumBusMillVolts/lreadings,(uint)lsumBusMicroAmps/lreadings);
+          _DEBUG("Range 2 K %u\n",ranges[2]);             
+          break;
         case 1:
           totalBusMicroAmps = 0;
           lnow=0;
@@ -222,7 +240,7 @@ void updateScreenX(void const *arg) {
         if (lpmax[i]>pmax)
             pmax = lpmax[i];
     }
-    if (pmax==pmin) pmax=pmin+0.001; // protect from device by zero
+    if (pmax==pmin) pmax+=0.001; // protect from device by zero
     scale = 36.0/(pmax-pmin);   
     if (power==1) {
       for (uint8_t i=0; i<128; i++) {

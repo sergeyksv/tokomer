@@ -503,6 +503,10 @@ void USR_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c) {
   osSignalSet (osMainThreadId, 0x2);  
 }
 
+void USR_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *hi2c) {
+  osSignalSet (osMainThreadId, 0x2);  
+}
+
 void USR_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
   osSignalSet (osMainThreadId, 0x1);
 }
@@ -510,6 +514,7 @@ void USR_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
 int32_t  miliVolts =0;
 int32_t  microAmps =0;
 uint64_t sumBusMillVolts =         0;
+uint64_t sumBusMillVoltsOrig =     0;
 int32_t  maxBusMillVolts =         0;
 int32_t  minBusMillVolts =         0;
 int64_t  sumBusMicroAmps =         0;
@@ -522,12 +527,14 @@ int16_t  zero             = 11;
 uint8_t  skip             = 0;
 uint8_t  power            = 0;
 uint8_t  power_state      = 0; 
+uint8_t  ina226           = 0;
+uint8_t  ina226_state     = 0;
 uint8_t  range            = 3;
 uint8_t  range_last       = 3;
 uint8_t  minRange         = 0;
 bool serialEnable = false;
-uint16_t ranges[4]={0,50,500,5000};
-uint16_t voltageK = 20589;
+uint16_t ranges[4]={0,50,475,4200};
+uint16_t voltageK = 17000;
 uint16_t refreshT = 500;
 uint8_t  rangeRiseT = 3; // with 10k/4.7k rise time is ~200us, at that time measurment can'be valid
                          // our cycle now is eaxactly 200us (rangeRiseT=1)
@@ -548,6 +555,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 }
 
 uint64_t lsumBusMillVolts;
+uint64_t lsumBusMillVoltsOrig;
 int32_t  lmaxBusMillVolts;
 int32_t  lminBusMillVolts;
 int64_t  lsumBusMicroAmps;
@@ -586,6 +594,29 @@ osThreadDef (flushUsbThread, flushUsbBuffer, osPriorityBelowNormal, 1, 200);
 
 uint16_t VirtAddVarTab[NumbOfVar] = {0x1700, 0x1701, 0x1702, 0x1703};
 
+// mode 1 - calibration, measure shunt and voltage with 1ms conversion
+// mode 0 - measuring current every 200ms 5khz
+void configureINA226Mode(uint8_t mode) {
+  buf[0]=0; buf[1]=0x40; buf[2]=0;
+  // configure ina
+  // mode: 0 - off, 1 - shunt, 2 - bus, 3 - both, 4 - shutdown, 5 - cont.shunt, 6 - cont.bus, 7 - cont.both
+  buf[2] = mode==1?7:5; // in mode 1 we measure bith 
+  // shunt conversion time:  0 - 140, 1 - 204, 2 - 322, 3 - 588, 4 - 1100, 5 - 2116, 6 - 4156, 7 - 8244  
+  buf[2] |= (mode==1?4:1)<<3;  
+  // bus conversion time:  0 - 140, 1 - 204, 2 - 332, 3 - 588, 4 - 1100, 5 - 2116, 6 - 4156, 7 - 8244  
+  buf[2] |= (mode==1?0:1)<<6;   
+  buf[1] |= (mode==1?1:0)>>2;   
+  // averaging: 0 - 1, 1 - 4, 2 - 16, 3 - 64, 4 - 128, 5 -256, 6 - 512, 7 - 1024
+  // buf[1] = 0x1<<1;
+  HAL_I2C_Master_Transmit_IT(&hi2c1,0x80,buf,3);
+  osSignalWait(0x2,10);
+
+  // preselect current shunt register after configuration
+  buf[0]=1;
+  HAL_I2C_Master_Transmit_IT(&hi2c1,0x80,buf,1);
+  osSignalWait(0x2,10); 
+}
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -609,11 +640,11 @@ void StartDefaultTask(void const * argument)
 
   EE_Init();
 
-  uint16_t ee_val;
-  EE_ReadVariable(0x1700,&ee_val); zero = ee_val;
-  EE_ReadVariable(0x1701,&ranges[2]);
-  EE_ReadVariable(0x1702,&ranges[3]);  
-  EE_ReadVariable(0x1703,&voltageK);  
+  //uint16_t ee_val;
+  //EE_ReadVariable(0x1700,&ee_val); zero = ee_val;
+  //EE_ReadVariable(0x1701,&ranges[2]);
+  //EE_ReadVariable(0x1702,&ranges[3]);  
+  //EE_ReadVariable(0x1703,&voltageK);  
 
   /* Infinite loop */
   char*  pageBuf=bufUsb[usbPage];
@@ -631,18 +662,7 @@ void StartDefaultTask(void const * argument)
   osDelay(1);
 
   // configure ina
-  HAL_I2C_Master_Transmit(&hi2c1,0x80,buf,1,100);  
-  HAL_I2C_Master_Receive(&hi2c1,0x80,buf+1,2,100);
-  // mode: 0 - off, 1 - shunt, 2 - bus, 3 - both, 4 - shutdown, 5 - cont.shunt, 6 - cont.bus, 7 - cont.both
-  buf[2] = (buf[2]&0xf8)|0x5; 
-  // shunt conversion time:  0 - 140, 1 - 204, 2 - 322, 3 - 588, 4 - 1100, 5 - 2116, 6 - 4156, 7 - 8244  
-  buf[2] = (buf[2]&0xc7)|(0x1<<3);   
-  // bus conversion time:  0 - 140, 1 - 204, 2 - 332, 3 - 588, 4 - 1100, 5 - 2116, 6 - 4156, 7 - 8244  
-  buf[2] = (buf[2]&0x3f)|(0x0<<6);   
-  buf[1] = (buf[1]&0xFE)|(0x0>>2);   
-  // averaging: 0 - 1, 1 - 4, 2 - 16, 3 - 64, 4 - 128, 5 -256, 6 - 512, 7 - 1024
-  buf[1] = (buf[1]&0xF1)|0x0<<1;
-  HAL_I2C_Master_Transmit(&hi2c1,0x80,buf,3,100);
+  configureINA226Mode(0);
   osDelay(1);
   // set SOL flag (shut overvoltage)
   buf[0]=6; buf[1] = 0x80; buf[2]=0;
@@ -656,6 +676,7 @@ void StartDefaultTask(void const * argument)
   HAL_I2C_Master_Transmit(&hi2c1,0x80,buf,1,100);
 
   HAL_I2C_RegisterCallback(&hi2c1,HAL_I2C_MASTER_RX_COMPLETE_CB_ID,&USR_I2C_MasterRxCpltCallback);
+  HAL_I2C_RegisterCallback(&hi2c1,HAL_I2C_MASTER_TX_COMPLETE_CB_ID,&USR_I2C_MasterTxCpltCallback);
   HAL_TIM_RegisterCallback(&htim3,HAL_TIM_PERIOD_ELAPSED_CB_ID,&USR_TIM_PeriodElapsedCallback);
 
   int cicleCounter =0;
@@ -665,6 +686,23 @@ void StartDefaultTask(void const * argument)
   {
     osSignalWait(0x1,10);
     HAL_ADC_Start(&hadc1);
+
+    if (ina226!=ina226_state) {
+      ina226_state = ina226;
+      configureINA226Mode(ina226_state);
+    }
+    if (ina226_state==1) {
+      buf[0]=2;
+      HAL_I2C_Master_Transmit_IT(&hi2c1,0x80,buf,1);    
+      osSignalWait(0x2,10);
+      HAL_I2C_Master_Receive_IT(&hi2c1,0x80,buf,2);
+      osSignalWait(0x2,10);
+      sumBusMillVoltsOrig += (uint16_t)inaRes+(((uint16_t)inaRes)>>2);
+      buf[0]=1;
+      HAL_I2C_Master_Transmit_IT(&hi2c1,0x80,buf,1);        
+      osSignalWait(0x2,10);
+    }
+
 	  HAL_I2C_Master_Receive_IT(&hi2c1,0x80,buf,2);
     osSignalWait(0x2,10);
     if (skip==0) {
@@ -686,9 +724,9 @@ void StartDefaultTask(void const * argument)
     // to put into right range when forced fake range control current
     if (minRange!=0) {
       if (minRange==2)
-        absMicroAmps += 13000;
+        absMicroAmps = 13000;
       else
-        absMicroAmps += 130000;
+        absMicroAmps = 130000;
     }
     
     // range 1 locks if current < 11 ma
@@ -730,8 +768,8 @@ void StartDefaultTask(void const * argument)
         maxBusMicroAmps = microAmps;
     }
     sumBusMicroAmps += microAmps;     // Add current value to sum
-    totalBusMicroAmps += microAmps * 200/1000;
-    miliVolts = HAL_ADC_GetValue(&hadc1)*voltageK/4096; // 18000/4096;
+    totalBusMicroAmps += (microAmps * 0x333)>>12; // 0.2;
+    miliVolts = (HAL_ADC_GetValue(&hadc1)*voltageK)>>12; // 18000/4096;
     sumBusMillVolts += miliVolts; // 14970 = 6 * 3000 (3.0000 v)    
 
     // update voltage accumulators
@@ -772,6 +810,7 @@ void StartDefaultTask(void const * argument)
 
     if ((cicleCounter++)>=refreshT) {
       // make data snapshot
+      lsumBusMillVoltsOrig=sumBusMillVoltsOrig;
       lsumBusMillVolts=sumBusMillVolts;
       lminBusMillVolts=minBusMillVolts;
       lmaxBusMillVolts=maxBusMillVolts;            
@@ -788,6 +827,7 @@ void StartDefaultTask(void const * argument)
       sumBusMillVolts = 0;
       sumBusMicroAmps = 0;
       sumBusMicroAmpsOrig = 0;      
+      sumBusMillVoltsOrig = 0;
 
       // signaling udpate screen thread
       osSignalSet (osUpdateScreenThreadId, 0x1);
