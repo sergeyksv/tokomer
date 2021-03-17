@@ -3,13 +3,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include "ssd1306.h"
 #include "standard_font.h"
 SSD1306 oled;
 
-float plot[128],plot1[128],plot2[128],plot3[128],plot4[128],plot5[128],pmax,pmin,scale;
-uint8_t pidx=0;
+int32_t plot[128],plot1[128],plot2[128],plot3[128],plot4[128],plot5[128],pmax,pmin;
+float scale;
+uint8_t pidx=0, didx=128;
 extern uint8_t  power;
 extern uint8_t  ina226;
 extern uint64_t lsumBusMillVoltsOrig;
@@ -104,6 +106,7 @@ void updateScreenX(void const *arg) {
         // long KEY3 - reset stats
         totalBusMicroAmps = 0;
         lnow=0;
+        didx=127;
         for (int i=0; i<128; i++) {
           plot[i]=0;
           plot1[i]=0;
@@ -177,6 +180,7 @@ void updateScreenX(void const *arg) {
         case 1:
           totalBusMicroAmps = 0;
           lnow=0;
+          didx=127;
           for (int i=0; i<128; i++) {
             plot[i]=0;
             plot1[i]=0;
@@ -215,45 +219,54 @@ void updateScreenX(void const *arg) {
     oled.puts(sbuf+1);              
 
     // graph
-    plot[pidx]=(float)lmaxBusMicroAmps/1000;
-    plot1[pidx]=(float)lminBusMicroAmps/1000;
-    plot2[pidx]=(float)(lsumBusMicroAmps/lreadings)/1000;
-    plot3[pidx]=(float)lmaxBusMillVolts/1000;
-    plot4[pidx]=(float)lminBusMillVolts/1000;
-    plot5[pidx]=(float)(lsumBusMillVolts/lreadings)/1000;
+    plot[pidx]=lmaxBusMicroAmps;
+    plot1[pidx]=lminBusMicroAmps; 
+    plot2[pidx]=lsumBusMicroAmps/lreadings;
+    plot3[pidx]=lmaxBusMillVolts;
+    plot4[pidx]=lminBusMillVolts;
+    plot5[pidx]=lsumBusMillVolts/lreadings;
 
-    float *lpmin, *lpmax, *lpavg;
+    int32_t *lpmin, *lpmax, *lpavg;
     if (gmode==0) {
       lpmin = plot1;
       lpmax = plot;
-      lpavg = plot1;
+      lpavg = plot2;
     } else {
       lpmin = plot4;
       lpmax = plot3;
       lpavg = plot5;
     }
 
-    pidx=pidx<127?pidx+1:0;
-    pmin=lpmin[0],pmax=lpmax[0];
+    pmin=lpmin[pidx],pmax=lpmax[pidx];
 
-    for (uint8_t i=0; i<128; i++) {
-        if (lpmin[i]<pmin)
-            pmin = lpmin[i];
-        if (lpmax[i]>pmax)
-            pmax = lpmax[i];
+    uint8_t idx_start = didx>0?((pidx-(127-didx))%128):(pidx+1)%128;
+    for (uint8_t i=1; i<128-didx; i++) {
+        uint8_t idx=(i+idx_start)%128;     
+        if (lpmin[idx]<pmin)
+            pmin = lpmin[idx];
+        if (lpmax[idx]>pmax)
+            pmax = lpmax[idx];
     }
-    if (pmax==pmin) pmax+=0.001; // protect from device by zero
+    if (pmax==pmin) pmax+=1; // protect from device by zero
     scale = 36.0/(pmax-pmin);   
     if (power==1) {
-      for (uint8_t i=0; i<128; i++) {
-          uint8_t idx = (i+pidx)%128;
+      uint8_t idx_start = didx>0?((pidx-(127-didx))%128):(pidx+1)%128;
+      for (uint8_t i=0,oidx=didx; i<128-didx; i++,oidx++) {
+          uint8_t idx=(i+idx_start)%128;     
           uint8_t min = scale*(lpmin[idx]-pmin)-1;
           uint8_t max = scale*(lpmax[idx]-pmin)+1;
-          oled.line(i,54-min,i,54-max);
-          if (max-min>4) {
-            oled.clear_pixel(i,53-scale*(lpavg[idx]-pmin));
+          if (lpmax[idx]-lpmin[idx]<=(gmode==0?8:60)) {
+            oled.set_pixel(oidx,53-scale*(lpavg[idx]-pmin));
+          } else {
+            oled.line(oidx,54-min,oidx,54-max);
+            if (max-min>4) {
+              oled.clear_pixel(oidx,53-scale*(lpavg[idx]-pmin));
+            }
           }
       }  
+
+      pidx=pidx<127?pidx+1:0;
+      if (didx>0) didx--;      
 
       // current mA
       oled.setCursor(0,1);
@@ -261,10 +274,10 @@ void updateScreenX(void const *arg) {
 
       // max value on grath
       oled.setCursor(0,7);
-      printFloat(pmin,gmode==0?4:3,true,gmode==0?"mA":"v");
+      printFloat((float)pmin/1000,gmode==0?4:3,true,gmode==0?"mA":"v");
 
       oled.setCursor(9,7);
-      printFloat(pmax,gmode==0?4:3,false,gmode==0?"mA":"v");
+      printFloat((float)pmax/1000,gmode==0?4:3,false,gmode==0?"mA":"v");
 
       // mAh
       oled.setCursor(8,1);

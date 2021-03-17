@@ -199,11 +199,12 @@ void SSD1306::initialise()
 {
     // Init
     HAL_GPIO_WritePin(DISPRES_GPIO_Port, DISPRES_Pin, GPIO_PIN_SET);
-    osDelay(10);
+    osDelay(100);
     HAL_GPIO_WritePin(DISPRES_GPIO_Port, DISPRES_Pin, GPIO_PIN_RESET);
-    osDelay(10);
+    osDelay(100);
     HAL_GPIO_WritePin(DISPRES_GPIO_Port, DISPRES_Pin, GPIO_PIN_SET);
-    
+    osDelay(100);
+
     off();
 
     set_display_clock_ratio_and_frequency(0, 8);
