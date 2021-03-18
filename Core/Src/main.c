@@ -826,7 +826,8 @@ void StartDefaultTask(void const * argument)
       lsumBusMicroAmpsOrig=sumBusMicroAmpsOrig;
       ltotalBusMicroAmps=totalBusMicroAmps;
       lreadings=readings;
-      lnow+=100;
+      if (overload==0)
+        lnow+=100;
 
       // reset readings
       readings = 0;

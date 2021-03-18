@@ -35,7 +35,7 @@ extern uint16_t voltageK;
 extern uint16_t refreshT;
 extern uint8_t  overload;
 
-#define SERIALDEBUG
+// #define SERIALDEBUG
 #ifdef SERIALDEBUG
 #include <stdarg.h>
 extern UART_HandleTypeDef huart1;
@@ -219,12 +219,14 @@ void updateScreenX(void const *arg) {
     oled.puts(sbuf+1);              
 
     // graph
-    plot[pidx]=lmaxBusMicroAmps;
-    plot1[pidx]=lminBusMicroAmps; 
-    plot2[pidx]=lsumBusMicroAmps/lreadings;
-    plot3[pidx]=lmaxBusMillVolts;
-    plot4[pidx]=lminBusMillVolts;
-    plot5[pidx]=lsumBusMillVolts/lreadings;
+    if (overload==0) {
+      plot[pidx]=lmaxBusMicroAmps;
+      plot1[pidx]=lminBusMicroAmps; 
+      plot2[pidx]=lsumBusMicroAmps/lreadings;
+      plot3[pidx]=lmaxBusMillVolts;
+      plot4[pidx]=lminBusMillVolts;
+      plot5[pidx]=lsumBusMillVolts/lreadings;
+    }
 
     int32_t *lpmin, *lpmax, *lpavg;
     if (gmode==0) {
@@ -248,8 +250,7 @@ void updateScreenX(void const *arg) {
             pmax = lpmax[idx];
     }
     if (pmax==pmin) pmax+=1; // protect from device by zero
-    if (power==1) {
-      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);    
+    if (power==1 || overload==1) {   
       scale = ((1<<25)*36)/(pmax-pmin);   
       uint8_t idx_start = didx>0?((pidx-(127-didx))%128):(pidx+1)%128;
       for (uint8_t i=0,oidx=didx; i<128-didx; i++,oidx++) {
@@ -265,10 +266,12 @@ void updateScreenX(void const *arg) {
             }
           }
       }  
-      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);    
 
-      pidx=pidx<127?pidx+1:0;
-      if (didx>0) didx--;      
+      // stop rolling on overload
+      if (overload==0) {
+        pidx=pidx<127?pidx+1:0;
+        if (didx>0) didx--;      
+      }
 
       // current mA
       oled.setCursor(0,1);

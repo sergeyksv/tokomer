@@ -243,16 +243,18 @@ void SSD1306::update()
 
 void SSD1306::set_pixel(int x, int y)
 {
-    if (x >= SSD1306_LCDWIDTH || y >= SSD1306_LCDHEIGHT) return;
+    int16_t idx = x + ((y>>3)<<7);
+    if (idx<0 || idx> 1024) return;
     
-    _screen[x + (y / 8) * 128] |= 1 << (y % 8);
+    _screen[idx] |= 1 << (y % 8);
 }
 
 void SSD1306::clear_pixel(int x, int y)
 {
-    if (x >= SSD1306_LCDWIDTH || y >= SSD1306_LCDHEIGHT) return;
+    int16_t idx = x + ((y>>3)<<7);
+    if (idx<0 || idx> 1024) return;
     
-    _screen[x + (y / 8) * 128] &= ~(1 << (y % 8));
+    _screen[idx] &= ~(1 << (y % 8));
 }
 
 void SSD1306::line(int x0, int y0, int x1, int y1) {
