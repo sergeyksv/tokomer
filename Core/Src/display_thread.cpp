@@ -10,7 +10,7 @@
 SSD1306 oled;
 
 int32_t plot[128],plot1[128],plot2[128],plot3[128],plot4[128],plot5[128],pmax,pmin;
-float scale;
+uint32_t scale;
 uint8_t pidx=0, didx=128;
 extern uint8_t  power;
 extern uint8_t  ina226;
@@ -35,7 +35,7 @@ extern uint16_t voltageK;
 extern uint16_t refreshT;
 extern uint8_t  overload;
 
-//#define SERIALDEBUG
+#define SERIALDEBUG
 #ifdef SERIALDEBUG
 #include <stdarg.h>
 extern UART_HandleTypeDef huart1;
@@ -248,22 +248,24 @@ void updateScreenX(void const *arg) {
             pmax = lpmax[idx];
     }
     if (pmax==pmin) pmax+=1; // protect from device by zero
-    scale = 36.0/(pmax-pmin);   
     if (power==1) {
+      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);    
+      scale = ((1<<25)*36)/(pmax-pmin);   
       uint8_t idx_start = didx>0?((pidx-(127-didx))%128):(pidx+1)%128;
       for (uint8_t i=0,oidx=didx; i<128-didx; i++,oidx++) {
           uint8_t idx=(i+idx_start)%128;     
-          uint8_t min = scale*(lpmin[idx]-pmin)-1;
-          uint8_t max = scale*(lpmax[idx]-pmin)+1;
+          uint8_t min = ((scale*(lpmin[idx]-pmin))>>25);
+          uint8_t max = ((scale*(lpmax[idx]-pmin))>>25);        
           if (lpmax[idx]-lpmin[idx]<=(gmode==0?8:60)) {
-            oled.set_pixel(oidx,53-scale*(lpavg[idx]-pmin));
+            oled.set_pixel(oidx,52-((scale*(lpavg[idx]-pmin))>>25));
           } else {
-            oled.line(oidx,54-min,oidx,54-max);
+            oled.line(oidx,53-min,oidx,52-max);
             if (max-min>4) {
-              oled.clear_pixel(oidx,53-scale*(lpavg[idx]-pmin));
+              oled.clear_pixel(oidx,52-((scale*(lpavg[idx]-pmin))>>25));
             }
           }
       }  
+      HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);    
 
       pidx=pidx<127?pidx+1:0;
       if (didx>0) didx--;      
