@@ -34,6 +34,7 @@ extern uint16_t ranges[4];
 extern uint16_t voltageK;
 extern uint16_t refreshT;
 extern uint8_t  overload;
+extern uint8_t  rangeScale;
 
 // #define SERIALDEBUG
 #ifdef SERIALDEBUG
@@ -120,9 +121,13 @@ void updateScreenX(void const *arg) {
           gmode = (gmode+1)%2;
       }
 
-      if (buttonCode==KEY2 && buttonTime>500) {
-        // long KEY2, toogle sending data
-        serialEnable = !serialEnable;
+      if (buttonCode==KEY2) {
+        if (buttonTime>500) {
+          // long KEY2, toogle sending data
+          serialEnable = !serialEnable;
+        } else {
+          rangeScale = (rangeScale+1)%4;
+        }
       }
 
       if (buttonCode==KEY3) {
@@ -292,6 +297,15 @@ void updateScreenX(void const *arg) {
     if (overload) {
         oled.setCursor(3,3); 
         oled.puts("overload !!");
+    }
+
+    for (uint8_t i=0; i<=8; i+=2) {
+      for (uint8_t j=0; j<8-i; j++) {
+        if (i>=rangeScale*2)
+          oled.set_pixel(56+j,i);
+        else 
+          oled.clear_pixel(56+j,i);        
+      }
     }
     oled.update();
   } 

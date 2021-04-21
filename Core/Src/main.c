@@ -535,6 +535,12 @@ uint8_t  range_last       = 3;
 uint8_t  minRange         = 0;
 bool serialEnable = false;
 uint16_t ranges[4]={0,128,1222,10683};
+uint8_t rangeScale=0;
+uint32_t rangeScales[4][4]={{11000,12000,110000,120000},
+                           {5500,6000,55000,60000},
+                           {2750,3000,27500,30000},
+                           {1100,1200,11000,12000},
+                          };
 uint16_t voltageK = 17000;
 uint16_t refreshT = 500;
 uint8_t  rangeRiseT = 3; // with 10k/4.7k rise time is ~200us, at that time measurment can'be valid
@@ -736,7 +742,7 @@ void StartDefaultTask(void const * argument)
     }
     
     // range 1 locks if current < 11 ma
-    if (range!=1 && absMicroAmps < 11000) {
+    if (range!=1 && absMicroAmps < rangeScales[rangeScale][0]) {
           HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_SET);
           HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_RESET);
           HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_RESET);
@@ -745,7 +751,7 @@ void StartDefaultTask(void const * argument)
     }
     
     // range 2 lock if current grows above 12 ma or reduces less than 110    
-    if (range!=2 && absMicroAmps > 12000 && absMicroAmps < 110000) {
+    if (range!=2 && absMicroAmps > rangeScales[rangeScale][1] && absMicroAmps < rangeScales[rangeScale][2]) {
           HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_SET);
           HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_RESET);
           HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_RESET);
@@ -754,7 +760,7 @@ void StartDefaultTask(void const * argument)
     }
     
     // range 3 locks for current bigger than 120 ma
-    if (range!=3 && absMicroAmps > 120000) {
+    if (range!=3 && absMicroAmps > rangeScales[rangeScale][3]) {
       HAL_GPIO_WritePin(RANGE3_GPIO_Port, RANGE3_Pin, GPIO_PIN_SET);
       HAL_GPIO_WritePin(RANGE2_GPIO_Port, RANGE2_Pin, GPIO_PIN_RESET);
       HAL_GPIO_WritePin(RANGE1_GPIO_Port, RANGE1_Pin, GPIO_PIN_RESET);
