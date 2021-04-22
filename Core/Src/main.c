@@ -532,7 +532,7 @@ uint8_t  ina226           = 0;
 uint8_t  ina226_state     = 0;
 uint8_t  range            = 3;
 uint8_t  range_last       = 3;
-uint8_t  minRange         = 0;
+uint8_t  forcedRange      = 0;   // 0 - not forced, 1 - 5 Ohm, 2 - 0.5 Ohm, 3 - 0.05 Ohm
 bool serialEnable = false;
 uint16_t ranges[4]={0,128,1222,10683};
 uint8_t rangeScale=0;
@@ -734,8 +734,10 @@ void StartDefaultTask(void const * argument)
     absMicroAmps = abs(microAmps);
 
     // to put into right range when forced fake range control current
-    if (minRange!=0) {
-      if (minRange==2)
+    if (forcedRange!=0) {
+      if (forcedRange==1)
+        absMicroAmps = rangeScales[rangeScale][0]-1;
+      else if (forcedRange==2)
         absMicroAmps = rangeScales[rangeScale][1]+1;
       else
         absMicroAmps = rangeScales[rangeScale][3]+1;

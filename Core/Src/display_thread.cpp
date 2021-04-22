@@ -28,7 +28,7 @@ extern int32_t  lnow;
 extern osThreadId osUpdateScreenThreadId;
 extern int16_t  zero;
 extern int64_t  totalBusMicroAmps;
-extern uint8_t  minRange;
+extern uint8_t  forcedRange;
 extern bool serialEnable;
 extern uint16_t ranges[4];
 extern uint16_t voltageK;
@@ -151,7 +151,7 @@ void updateScreenX(void const *arg) {
     if (calibrationStep>0) {
       switch (calibrationStep) {
         case 9:      // set 3 rd range
-          minRange = 0;
+          forcedRange = 0;
           voltageK = 17000;    
           ina226 = 1;       
           HAL_GPIO_WritePin(ONEKLOAD_GPIO_Port, ONEKLOAD_Pin, GPIO_PIN_SET); 
@@ -159,7 +159,7 @@ void updateScreenX(void const *arg) {
           _DEBUG("Zero I %d\n",zero);     
           break;
         case 7:
-          minRange = 3;
+          forcedRange = 3;
           ranges[3] = 10700;          
           // calibration current in ua on 1K is voltage in mv
           voltageK = (lsumBusMillVoltsOrig*voltageK)/lsumBusMillVolts;
@@ -167,14 +167,14 @@ void updateScreenX(void const *arg) {
           _DEBUG("Voltage K %u\n",voltageK);
           break;
         case 5:
-          minRange = 2;
+          forcedRange = 2;
           ranges[2] = 1222;
           ranges[3] = (lsumBusMillVoltsOrig*ranges[3])/lsumBusMicroAmpsOrig;
           _DEBUG("INA226 %u mV, STM32 %u mV, INA226 %u uA\n",(uint)lsumBusMillVoltsOrig/lreadings,(uint)lsumBusMillVolts/lreadings,(uint)lsumBusMicroAmps/lreadings);
           _DEBUG("Range 3 K %u\n",ranges[3]);   
           break;
         case 3:
-          minRange = 0;
+          forcedRange = 0;
           power=1;
           ina226=0;
           HAL_GPIO_WritePin(ONEKLOAD_GPIO_Port, ONEKLOAD_Pin, GPIO_PIN_RESET);      
