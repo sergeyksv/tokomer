@@ -736,9 +736,9 @@ void StartDefaultTask(void const * argument)
     // to put into right range when forced fake range control current
     if (minRange!=0) {
       if (minRange==2)
-        absMicroAmps = 13000;
+        absMicroAmps = rangeScales[rangeScale][1]+1;
       else
-        absMicroAmps = 130000;
+        absMicroAmps = rangeScales[rangeScale][3]+1;
     }
     
     // range 1 locks if current < 11 ma
